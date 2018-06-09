@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import subprocess, os.path
+import os, re, subprocess
 
 from .. import mlog
 from .. import coredata
 from . import compilers
 from ..mesonlib import (
     EnvironmentException, version_compare, Popen_safe, listify,
-    for_windows, for_darwin, for_cygwin, for_haiku,
+    for_windows, for_darwin, for_cygwin, for_haiku, for_openbsd,
 )
 
 from .compilers import (
@@ -838,6 +838,27 @@ class CCompiler(Compiler):
             raise AssertionError('BUG: unknown libtype {!r}'.format(libtype))
         return prefixes, suffixes
 
+    def find_openbsd_so(self, path):
+        # Before coming here, we didn't find 'dir/libfoo.so'.
+        # Now look for 'dir/libfoo.so.X.Y' with highest X.Y.
+        path_dir, path_base = os.path.split(path)
+        pattern = re.compile('\A' + re.escape(path_base) +
+                             '\.([0-9]+)\.([0-9]+)\Z')
+        best_e = best_v = None
+        with os.scandir(path_dir) as it:
+            for entry in it:
+                match = pattern.match(entry.name)
+                if match:
+                    # version = (X, Y) as integers
+                    version = tuple(map(int, match.group(1, 2)))
+                    if (best_e and version > best_v) or (not best_e):
+                        best_e = entry
+                        best_v = version
+        if best_e:
+            return os.path.join(path_dir, best_e)
+        else:
+            return None
+
     def find_library_real(self, libname, env, extra_dirs, code, libtype):
         # First try if we can just add the library as -l.
         # Gcc + co seem to prefer builtin lib dirs to -L dirs.
@@ -853,6 +874,7 @@ class CCompiler(Compiler):
         # Not found or we want to use a specific libtype? Try to find the
         # library file itself.
         prefixes, suffixes = self.get_library_naming(env, libtype)
+        is_openbsd = for_openbsd(self.is_cross, env)
         # Triply-nested loop!
         for d in extra_dirs:
             for suffix in suffixes:
@@ -860,6 +882,10 @@ class CCompiler(Compiler):
                     trial = os.path.join(d, prefix + libname + '.' + suffix)
                     if os.path.isfile(trial):
                         return [trial]
+                    if is_openbsd and suffix == 'so':
+                        trial = self.find_openbsd_so(trial)
+                        if trial:
+                            return [trial]
         return None
 
     def find_library_impl(self, libname, env, extra_dirs, code, libtype):
@@ -934,9 +960,9 @@ class CCompiler(Compiler):
         return self.has_arguments(args, env, code, mode='link')
 
 class ClangCCompiler(ClangCompiler, CCompiler):
-    def __init__(self, exelist, version, clang_type, is_cross, exe_wrapper=None, **kwargs):
+    def __init__(self, exelist, version, cltype, clversion, is_cross, exe_wrapper=None, **kwargs):
         CCompiler.__init__(self, exelist, version, is_cross, exe_wrapper, **kwargs)
-        ClangCompiler.__init__(self, clang_type)
+        ClangCompiler.__init__(self, cltype, clversion)
         default_warn_args = ['-Wall', '-Winvalid-pch']
         self.warn_args = {'1': default_warn_args,
                           '2': default_warn_args + ['-Wextra'],

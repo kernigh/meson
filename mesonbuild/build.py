@@ -23,7 +23,7 @@ from . import mlog
 from .mesonlib import File, MesonException, listify, extract_as_list
 from .mesonlib import typeslistify, stringlistify, classify_unity_sources
 from .mesonlib import get_filenames_templates_dict, substitute_values
-from .mesonlib import for_windows, for_darwin, for_cygwin, for_android, has_path_sep
+from .mesonlib import for_windows, for_darwin, for_cygwin, for_android, for_openbsd, has_path_sep
 from .compilers import is_object, clike_langs, sort_clike, lang_suffixes
 from .interpreterbase import FeatureNew, FeatureNewKwargs
 
@@ -1484,6 +1484,24 @@ class SharedLibrary(BuildTarget):
             suffix = 'so'
             # Android doesn't support shared_library versioning
             self.filename_tpl = '{0.prefix}{0.name}.{0.suffix}'
+        elif for_openbsd(is_cross, env):
+            # https://www.openbsd.org/faq/ports/specialtopics.html#SharedLibs
+            prefix = 'lib'
+            suffix = 'so'
+            # OpenBSD has no soversion alias, but shared_library() documents
+            # that it uses soversion if ltversion is not specified.
+            parts = self.ltversion or self.soversion
+            if parts:
+                # libfoo.so.X.Y (.Y is required)
+                parts = parts.split('.')
+                if len(parts) < 2:
+                    self.xyversion = parts[0] + '.0'
+                else:
+                    self.xyversion = parts[0] + '.' + parts[1]
+                self.filename_tpl = '{0.prefix}{0.name}.{0.suffix}.{0.xyversion}'
+            else:
+                # No versioning, libfoo.so
+                self.filename_tpl = '{0.prefix}{0.name}.{0.suffix}'
         else:
             prefix = 'lib'
             suffix = 'so'
@@ -1590,6 +1608,9 @@ class SharedLibrary(BuildTarget):
         # Aliases are only useful with .so and .dylib libraries. Also if
         # there's no self.soversion (no versioning), we don't need aliases.
         if self.suffix not in ('so', 'dylib') or not self.soversion:
+            return {}
+        # OpenBSD doesn't use aliases.
+        if for_openbsd(self.is_cross, self.environment):
             return {}
         # With .so libraries, the minor and micro versions are also in the
         # filename. If ltversion != soversion we create an soversion alias:

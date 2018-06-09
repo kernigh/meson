@@ -1000,11 +1000,16 @@ class Compiler:
                 paths = paths + ':' + padding
         args = []
         if mesonlib.is_dragonflybsd() or mesonlib.is_openbsd():
-            # This argument instructs the compiler to record the value of
-            # ORIGIN in the .dynamic section of the elf. On Linux this is done
-            # by default, but is not on dragonfly/openbsd for some reason. Without this
-            # $ORIGIN in the runtime path will be undefined and any binaries
-            # linked against local libraries will fail to resolve them.
+            # FIXME: need to call mesonlib.for_*bsd(self.is_cross, environment)
+            # but we don't know environment!
+
+            # -Wl,-z,origin sets the flags DF_ORIGIN and DF_1_ORIGIN in the
+            # .dynamic section of the elf. DragonFly's rtld(1) and OpenBSD's
+            # ld.so(1) refuse to expand $ORIGIN unless either DF_ORIGIN or
+            # DF_1_ORIGIN is set. Without $ORIGIN, any binaries linked against
+            # local libraries will fail to resolve them. FreeBSD, NetBSD,
+            # Linux don't need -Wl,-z,origin; see
+            # https://github.com/freebsd/freebsd/commit/786bb38
             args.append('-Wl,-z,origin')
         args.append('-Wl,-rpath,' + paths)
         if get_compiler_is_linuxlike(self):
@@ -1099,13 +1104,17 @@ def get_largefile_args(compiler):
     '''
     if get_compiler_is_linuxlike(compiler):
         # Enable large-file support unconditionally on all platforms other
-        # than macOS and Windows. macOS is now 64-bit-only so it doesn't
+        # than macOS and Windows. macOS only has 64-bit off_t so it doesn't
         # need anything special, and Windows doesn't have automatic LFS.
         # You must use the 64-bit counterparts explicitly.
-        # glibc, musl, and uclibc, and all BSD libcs support this. On Android,
+        # glibc, musl, and uclibc support this. On Android,
         # support for transparent LFS is available depending on the version of
         # Bionic: https://github.com/android/platform_bionic#32-bit-abi-bugs
         # https://code.google.com/p/android/issues/detail?id=64613
+        #
+        # BSDs since 4.4BSD ignore _FILE_OFFSET_BITS (like macOS), but we need
+        # -D_FILE_OFFSET_BITS=64 on BSDs (except macOS) to pass our own test
+        # in `linuxlike/10 large file support`.
         #
         # If this breaks your code, fix it! It's been 20+ years!
         return ['-D_FILE_OFFSET_BITS=64']
@@ -1156,13 +1165,18 @@ class GnuCompiler:
         self.id = 'gcc'
         self.gcc_type = gcc_type
         self.defines = defines or {}
+        is_openbsd = '__OpenBSD__' in defines
         self.base_options = ['b_pch', 'b_lto', 'b_pgo', 'b_sanitize', 'b_coverage',
                              'b_colorout', 'b_ndebug', 'b_staticpic']
         if self.gcc_type == GCC_OSX:
             self.base_options.append('b_bitcode')
+        elif is_openbsd:
+            pass # b_lundef causes linker errors with libc symbols.
         else:
             self.base_options.append('b_lundef')
-        self.base_options.append('b_asneeded')
+        if not is_openbsd:
+            # In OpenBSD, -Wl,--as-needed causes linker errors.
+            self.base_options.append('b_asneeded')
         # All GCC backends can do assembly
         self.can_compile_suffixes.add('s')
 
@@ -1284,16 +1298,22 @@ class ElbrusCompiler(GnuCompiler):
         return paths
 
 class ClangCompiler:
-    def __init__(self, clang_type):
+    def __init__(self, clang_type, clang_version):
         self.id = 'clang'
         self.clang_type = clang_type
+        # Check for lowercase 'openbsd'; some versions don't have 'OpenBSD'.
+        is_openbsd = 'openbsd' in clang_version
         self.base_options = ['b_pch', 'b_lto', 'b_pgo', 'b_sanitize', 'b_coverage',
                              'b_ndebug', 'b_staticpic', 'b_colorout']
         if self.clang_type == CLANG_OSX:
             self.base_options.append('b_bitcode')
+        elif is_openbsd:
+            pass # b_lundef causes linker errors with libc symbols.
         else:
             self.base_options.append('b_lundef')
-        self.base_options.append('b_asneeded')
+        if not is_openbsd:
+            # In OpenBSD, -Wl,--as-needed causes linker errors.
+            self.base_options.append('b_asneeded')
         # All Clang backends can do assembly and LLVM IR
         self.can_compile_suffixes.update(['ll', 's'])
 

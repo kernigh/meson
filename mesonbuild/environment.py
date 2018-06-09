@@ -541,7 +541,7 @@ class Environment:
                 else:
                     cltype = CLANG_STANDARD
                 cls = ClangCCompiler if lang == 'c' else ClangCPPCompiler
-                return cls(ccache + compiler, version, cltype, is_cross, exe_wrap, full_version=full_version)
+                return cls(ccache + compiler, version, cltype, out, is_cross, exe_wrap, full_version=full_version)
             if 'Microsoft' in out or 'Microsoft' in err:
                 # Latest versions of Visual Studio print version
                 # number to stderr but earlier ones print version
