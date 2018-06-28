@@ -292,9 +292,8 @@ def for_windows(is_cross, env):
     """
     if not is_cross:
         return is_windows()
-    elif env.cross_info.has_host():
-        return env.cross_info.config['host_machine']['system'] == 'windows'
-    return False
+    else:
+        return env.cross_info.get_host_system() == 'windows'
 
 def for_cygwin(is_cross, env):
     """
@@ -304,9 +303,8 @@ def for_cygwin(is_cross, env):
     """
     if not is_cross:
         return is_cygwin()
-    elif env.cross_info.has_host():
-        return env.cross_info.config['host_machine']['system'] == 'cygwin'
-    return False
+    else:
+        return env.cross_info.get_host_system() == 'cygwin'
 
 def for_linux(is_cross, env):
     """
@@ -316,9 +314,8 @@ def for_linux(is_cross, env):
     """
     if not is_cross:
         return is_linux()
-    elif env.cross_info.has_host():
-        return env.cross_info.config['host_machine']['system'] == 'linux'
-    return False
+    else:
+        return env.cross_info.get_host_system() == 'linux'
 
 def for_darwin(is_cross, env):
     """
@@ -328,9 +325,8 @@ def for_darwin(is_cross, env):
     """
     if not is_cross:
         return is_osx()
-    elif env.cross_info.has_host():
-        return env.cross_info.config['host_machine']['system'] in ('darwin', 'ios')
-    return False
+    else:
+        return env.cross_info.get_host_system() in ('darwin', 'ios')
 
 def for_android(is_cross, env):
     """
@@ -340,9 +336,8 @@ def for_android(is_cross, env):
     """
     if not is_cross:
         return is_android()
-    elif env.cross_info.has_host():
-        return env.cross_info.config['host_machine']['system'] == 'android'
-    return False
+    else:
+        return env.cross_info.get_host_system() == 'android'
 
 def for_haiku(is_cross, env):
     """
@@ -352,9 +347,8 @@ def for_haiku(is_cross, env):
     """
     if not is_cross:
         return is_haiku()
-    elif env.cross_info.has_host():
-        return env.cross_info.config['host_machine']['system'] == 'haiku'
-    return False
+    else:
+        return env.cross_info.get_host_system() == 'haiku'
 
 def exe_exists(arglist):
     try:
